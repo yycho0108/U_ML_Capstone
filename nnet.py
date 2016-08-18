@@ -79,7 +79,7 @@ class Net(object):
     def __init__(self):
         self.session = tf.Session()
         #self.optimizer = tf.train.AdagradOptimizer(0.1,0.1)
-        self.optimizer = tf.train.RMSPropOptimizer(0.01,0.9,0.1,1e-10)
+        self.optimizer = tf.train.RMSPropOptimizer(0.001,0.9,0.1,1e-10)
         self.L = [] # Layers
 
     def setup(self):
@@ -107,7 +107,6 @@ class Net(object):
                 print('Predictions : ', pred[0])
                 print('Minibatch loss at step %d: %f' % (step, l))
                 print('Minibatch accuracy: %.1f%%' % accuracy(pred, batch_Y))
-
 
     def _predict(self,X):
         #print('x', X)

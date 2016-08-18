@@ -16,7 +16,8 @@ class TicTacToe:
         #return tuple(np.reshape(self.board,(self.h*self.w))) #to column vector
         #return np.reshape(self.board,(self.h*self.w,1)) #to column vector
     def available(self):
-        return [i*self.w+j for i in range(self.h) for j in range(self.w) if self.board[i,j] == X]
+        choices = [i*self.w+j for i in range(self.h) for j in range(self.w) if self.board[i,j] == X]
+        return choices
 
     def act(self,a):
         i,j = a/self.w, a%self.w
@@ -29,6 +30,7 @@ class TicTacToe:
             reward = 1.0
         else:
             reward = -1.0
+
         self.turn = B if self.turn==A else A
         return reward
     @staticmethod
