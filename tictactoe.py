@@ -26,9 +26,9 @@ class TicTacToe:
         if won == X:
             reward = 0.0
         elif won == self.turn:
-            reward = 10.0
+            reward = 1.0
         else:
-            reward = -10.0
+            reward = -1.0
         self.turn = B if self.turn==A else A
         return reward
     @staticmethod

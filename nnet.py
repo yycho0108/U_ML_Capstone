@@ -69,9 +69,6 @@ class DenseLayer(Layer):
             shape = list(x.shape)
         else:
             shape = x.get_shape().as_list()
-
-        print(shape)
-
         x = tf.reshape(x,[shape[0],reduce(lambda x,y:x*y, shape[1:])]) # batch-flat
         res = tf.matmul(x,self.W)
         if self.a == 'relu':
@@ -81,7 +78,8 @@ class DenseLayer(Layer):
 class Net(object):
     def __init__(self):
         self.session = tf.Session()
-        self.optimizer = tf.train.AdagradOptimizer(0.1,0.1)
+        #self.optimizer = tf.train.AdagradOptimizer(0.1,0.1)
+        self.optimizer = tf.train.RMSPropOptimizer(0.01,0.9,0.1,1e-10)
         self.L = [] # Layers
 
     def setup(self):
@@ -94,7 +92,7 @@ class Net(object):
         prediction = self._predict(tf_X) # estimate
         loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(prediction,tf_Y))
         train_step = self.optimizer.minimize(loss)
-        vs = ([v for v in tf.all_variables() if 'Adagrad' in v.name])
+        vs = ([v for v in tf.all_variables() if 'RMS' in v.name])
 
         #self.session.run(tf.initialize_variables([self.optimizer.get_slot(loss, name) for name in self.optimizer.get_slot_names()]))
         self.session.run(tf.initialize_variables(vs))
@@ -106,16 +104,17 @@ class Net(object):
             feed_dict = {tf_X : batch_X, tf_Y : batch_Y}
             _,l,pred = self.session.run([train_step,loss,prediction],feed_dict = feed_dict)
             if (step % 100 == 0):
+                print('Predictions : ', pred[0])
                 print('Minibatch loss at step %d: %f' % (step, l))
                 print('Minibatch accuracy: %.1f%%' % accuracy(pred, batch_Y))
 
 
     def _predict(self,X):
-        print('x', X)
+        #print('x', X)
         for l in self.L:
-            print(':)')
+            #print(':)')
             X = l.ff(X)
-        print('pred')
+        #print('pred')
         return X
 
     def predict(self,X):
@@ -131,7 +130,7 @@ class Net(object):
 if __name__ == "__main__":
 
     # LOAD DATA
-    pickle_file = '../DeepLearning/notMNIST.pickle'
+    pickle_file = '../../../DeepLearning/notMNIST.pickle'
 
     with open(pickle_file, 'rb') as f:
         save = pickle.load(f)
