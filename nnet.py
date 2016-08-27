@@ -1,6 +1,8 @@
 #!/usr/bin/python
 from __future__ import print_function
 import numpy as np
+np.set_printoptions(precision=3)
+
 import time
 
 from six.moves import cPickle as pickle
@@ -18,6 +20,11 @@ def reformat(dataset, labels):
 
 def accuracy(predictions, labels):
     return (100.0 * np.sum(np.argmax(predictions, 1) == np.argmax(labels, 1))/ predictions.shape[0])
+
+def softmax(x):
+    res = np.exp(x - max(0.0, np.max(x))) #subtract max value
+    #return res / np.sum(res,1)[:,None]
+    return res / np.sum(res)
 
 class Layer(object):
     def __init__(self):
@@ -79,33 +86,37 @@ class Net(object):
     def __init__(self):
         self.session = tf.Session()
         #self.optimizer = tf.train.AdagradOptimizer(0.1,0.1)
-        self.optimizer = tf.train.RMSPropOptimizer(0.001,0.9,0.1,1e-10)
+        self.optimizer = tf.train.RMSPropOptimizer(0.00025,0.95,0.1,1e-10)
+        #TODO : Add CLIPPING
+        #self.optimizer = tf.train.GradientDescentOptimizer(0.0)
         self.L = [] # Layers
 
-    def setup(self):
+    def setup(self,batch_size,x_shape,y_shape):
+
+        self.tf_X = tf.placeholder(tf.float32,shape=((batch_size,) + x_shape))
+        self.tf_Y = tf.placeholder(tf.float32,shape=((batch_size,) + y_shape))
+
+        self.prediction = self._predict(self.tf_X) # estimate
+        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(self.prediction,self.tf_Y))
+        self.train_step = self.optimizer.minimize(self.loss)
+
         self.session.run(tf.initialize_all_variables())
 
     def train(self,X,Y,batch_size,num_steps):
-        tf_X = tf.placeholder(tf.float32,shape=((batch_size,) + X.shape[1:]))
-        tf_Y = tf.placeholder(tf.float32,shape=((batch_size,) + Y.shape[1:]))
-
-        prediction = self._predict(tf_X) # estimate
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(prediction,tf_Y))
-        train_step = self.optimizer.minimize(loss)
-        vs = ([v for v in tf.all_variables() if 'RMS' in v.name])
-
-        #self.session.run(tf.initialize_variables([self.optimizer.get_slot(loss, name) for name in self.optimizer.get_slot_names()]))
-        self.session.run(tf.initialize_variables(vs))
+        #vs = ([v for v in tf.all_variables() if 'RMS' in v.name])
+        #self.session.run(tf.initialize_variables(vs))
+        #self.session.run(tf.initialize_variables([self.optimizer.get_slot(self.loss, name) for name in self.optimizer.get_slot_names()]))
 
         for step in range(num_steps):
             indices = np.random.randint(Y.shape[0],size = batch_size)
             batch_X = X[indices,:,:,:]
             batch_Y = Y[indices,:]
-            feed_dict = {tf_X : batch_X, tf_Y : batch_Y}
-            _,l,pred = self.session.run([train_step,loss,prediction],feed_dict = feed_dict)
+            feed_dict = {self.tf_X : batch_X, self.tf_Y : batch_Y}
+            _,l,pred = self.session.run([self.train_step,self.loss,self.prediction],feed_dict = feed_dict)
             if (step % 100 == 0):
-                print('Predictions : ', pred[0])
-                print('Minibatch loss at step %d: %f' % (step, l))
+                print('Predictions : ', softmax(pred[0]))
+                print('Target : ', batch_Y[0])
+                print('Minibatch self.loss at step %d: %f' % (step, l))
                 print('Minibatch accuracy: %.1f%%' % accuracy(pred, batch_Y))
 
     def _predict(self,X):

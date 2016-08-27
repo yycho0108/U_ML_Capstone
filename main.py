@@ -3,16 +3,13 @@ from tictactoe import *
 from nnet import *
 from collections import defaultdict, deque
 import pandas as pd
-
-#memories = Queue.Queue(maxsize=1000)
-
-#def f():
-#    print("NEW")
-#    return 0.0
-
 qtable = defaultdict(lambda:[0.5 for _ in range(9)])
 
 arr = np.asarray
+
+def dummy():
+    print "NEW"
+    return 0
 
 def lerp(a,b,c):
     return a*c + b*(1.0-c)
@@ -28,37 +25,44 @@ def choose(q,choices):
 
 if __name__ == "__main__":
 
-    # test with just dense layers
+    # train parameters
+    alpha = 0.25
+    gamma = 0.4 # discount_rate
+    n_epoch = 10000
+    u_freq = 4
+    batch_size = 32
+    n_iter = 200
+    mem_size = 8192
+
+    # setup network
     net = Net()
-    #net.append(ConvolutionLayer(patch_size,1,16,activation='relu')) #depth : 3 -> 16
-    #net.append(ConvolutionLayer(patch_size,16,16,activation='relu')) #depth : 16 -> 16
-    #net.append(DropoutLayer(0.5))
     net.append(DenseLayer((9, 16), activation='relu'))
     net.append(DenseLayer((16, 16), activation='relu'))
     net.append(DenseLayer((16, 9), activation='none'))
-    net.setup()
 
-    # roughly something like ...
+    #net.append(ConvolutionLayer(patch_size,1,16,activation='relu')) #depth : 3 -> 16
+    #net.append(ConvolutionLayer(patch_size,16,16,activation='relu')) #depth : 16 -> 16
+    #net.append(DropoutLayer(0.5))
+    net.setup(batch_size,(3,3,1),(9,))
 
-    # train
-    alpha = 0.1
-    dqn_alpha = 1.0
-    gamma = 0.3
-    n_epoch = 100000
-    u_freq = 32
-    batch_size = 16
-    n_iter = 1000
-    mem_size = 8192
-
-    #memories = deque(maxlen=mem_size)
-    memories = []
+    memories = deque(maxlen=mem_size)
+    #memories = []
 
     # pre-train q table
+    i = 0
     for epoch in range(n_epoch):
+        print 'epoch : {}'.format(epoch)
         ttt = TicTacToe() # NEW BOARD
-        while True:
+        end = False
+        s2 = None
+
+        while not end:
             # COLLECT DATA
-            s1 = ttt.sense()
+            if s2 == None:
+                s1 = ttt.sense().copy() # copy
+            else:
+                s1 = s2
+
             # TABLE
             s1_t = reformat(s1) 
 
@@ -66,26 +70,68 @@ if __name__ == "__main__":
             if len(choices) == 0: # draw
                 break
             a = np.random.choice(choices)
-            r = ttt.act(a)
-            s2 = ttt.sense()
+            end, r = ttt.act(a)
+            s2 = ttt.sense().copy()
 
             s2_t = reformat(s2)
-            maxqn = -max(qtable[s2_t]) #negate opponent's1 best, expectimax
+            maxqn = -max(qtable[s2_t]) #negate opponent's best, expectimax
             qtable[s1_t][a] = lerp(r+gamma*maxqn,qtable[s1_t][a],alpha)
 
-            if r != 0.0:
-                break
-                
             # DQN
-            #memories.append((s1,a,r,s2))
-            #if len(memories) >= mem_size:
-            #    s1,a,r,s2 = zip(*memories)
-            #    s1,a,r,s2 = arr(s1,dtype=np.float32),arr(a),arr(r),arr(s2,dtype=np.float32)
-            #    q_new = r + gamma * -np.max(net.predict(s2),1)
-            #    y_new = net.predict(s1)
-            #    y_new[range(mem_size),a] = lerp(q_new, y_new[range(mem_size),a],dqn_alpha)
-            #    net.train(s1, arr([qtable[reformat(s)] for s in s1]), batch_size, n_iter)
-            #    memories = []
+            memories.append((s1,a,r,s2))
+
+    print "LEN : " ,len(qtable.keys())
+
+    print len([1 for v in qtable.values() if tuple([0.5 for _ in range(9)]) == tuple(v)]) # 956..ish
+
+    # train network
+    i = 0
+    for epoch in range(n_epoch):
+        print 'epoch : {}'.format(epoch)
+        ttt = TicTacToe() # NEW BOARD
+        end = False
+        s2 = None
+        while not end:
+            i = i+1
+            # COLLECT DATA
+            if s2 == None:
+                s1 = ttt.sense().copy() # copy
+            else:
+                s1 = s2
+
+            # TABLE
+            s1_t = reformat(s1) 
+            #print 's1_t', s1_t, type(s1_t)
+
+            choices = ttt.available() #np.nonzero(s1==X) #available actions
+            if len(choices) == 0: # draw
+                break
+            a = np.random.choice(choices)
+            end, r = ttt.act(a)
+            s2 = ttt.sense().copy() # copy
+
+            s2_t = reformat(s2)
+            maxqn = -max(qtable[s2_t]) #negate opponent's best, expectimax
+            qtable[s1_t][a] = lerp(r+gamma*maxqn,qtable[s1_t][a],alpha)
+
+            # DQN
+            memories.append((s1,a,r,s2))
+
+            if len(memories) >= mem_size and i % u_freq == 0:
+
+                s1_v,a_v,r_v,s2_v = zip(*memories)
+                s1_v,a_v,r_v,s2_v = arr(s1_v),arr(a_v),arr(r_v),arr(s2_v)
+
+                q_new = r_v + gamma * -np.max(net.predict(s2_v),1)
+                y_new = net.predict(s1_v)
+                y_new[range(mem_size),a_v] = q_new # replace with new q_new
+
+                # train with q table
+                net.train(s1_v, arr([qtable[reformat(s)] for s in s1_v]), batch_size, n_iter)
+
+                # train with network ( itself )
+                #net.train(s1_v,y_new,batch_size,n_iter)
+                #memories = []
 
         #if (epoch % u_freq) == 0 and len(memories) > batch_size:
 
@@ -109,7 +155,7 @@ if __name__ == "__main__":
             else:
                 #s1 = np.reshape(s1, (1,) + s1.shape).astype(np.float32)
                 q_t = qtable[reformat(s1)]
-                q_n = net.predict(np.reshape(s1, (1,) + s1.shape).astype(np.float32))[0]
+                q_n = net.predict(np.reshape(s1, (1,) + s1.shape))[0]
                 print 'q_t', q_t
                 print 'q_n', q_n
                 #a = choose(q_t, choices)

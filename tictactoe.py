@@ -9,7 +9,7 @@ class TicTacToe:
         self.h = h
         self.w = w
         self.turn = A
-        self.board = np.zeros((h,w),dtype=np.uint8) 
+        self.board = np.zeros((h,w),dtype=np.float32) 
 
     def sense(self):
         return np.reshape(self.board,(self.h,self.w,1))
@@ -23,16 +23,22 @@ class TicTacToe:
         i,j = a/self.w, a%self.w
         self.board[i,j] = self.turn
         won = self.check()
+        end = True 
 
         if won == X:
+            # no win
             reward = 0.0
+            end = False
         elif won == self.turn:
-            reward = 1.0
+            # my win
+            reward = 0.1
         else:
-            reward = -1.0
+            # other's win
+            reward = -0.1
 
         self.turn = B if self.turn==A else A
-        return reward
+
+        return end, reward
     @staticmethod
     def win(board):
         v = np.all(board,0)
